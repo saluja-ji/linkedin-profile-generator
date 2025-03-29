@@ -1,6 +1,18 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file if present
+dotenv.config();
+
+// Enable MongoDB storage by setting this environment variable
+process.env.USE_MONGODB = process.env.USE_MONGODB || 'true';
+
+// Set MongoDB URI if not already set
+if (!process.env.MONGODB_URI) {
+  process.env.MONGODB_URI = 'mongodb://localhost:27017/linkedin-website-generator';
+}
 
 const app = express();
 app.use(express.json());

@@ -5,6 +5,8 @@ import {
   websites, type Website, type InsertWebsite,
   waitlistEntries, type WaitlistEntry, type InsertWaitlistEntry
 } from "@shared/schema";
+import { MongoDBStorage } from './db/mongodb-storage';
+import { connectToDatabase } from './db/config';
 
 export interface IStorage {
   // User methods
@@ -243,4 +245,54 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Initialize MongoDB connection and use MongoDB storage
+let storage: IStorage;
+
+// If MongoDB connection is enabled, use MongoDBStorage, otherwise fallback to MemStorage
+const USE_MONGODB = process.env.USE_MONGODB === 'true';
+
+// Helper function to create a timeout promise
+const timeoutPromise = (timeout: number) => {
+  return new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Connection timed out after ${timeout}ms`)), timeout)
+  );
+};
+
+// Initialize storage with a fallback mechanism
+async function initializeStorage(): Promise<IStorage> {
+  if (USE_MONGODB) {
+    console.log('Attempting to use MongoDB for data storage');
+    
+    try {
+      // Try to connect to MongoDB with a timeout
+      await Promise.race([
+        connectToDatabase(),
+        timeoutPromise(5000) // 5 second timeout
+      ]);
+      
+      console.log('MongoDB connection established successfully');
+      return new MongoDBStorage();
+    } catch (err) {
+      console.error('Failed to connect to MongoDB:', err);
+      console.warn('Falling back to in-memory storage');
+      return new MemStorage();
+    }
+  } else {
+    console.log('Using in-memory storage (MongoDB not enabled)');
+    return new MemStorage();
+  }
+}
+
+// Use in-memory storage by default until MongoDB connection is attempted
+storage = new MemStorage();
+
+// Attempt to connect to MongoDB in the background
+initializeStorage().then(storageImplementation => {
+  storage = storageImplementation;
+  console.log(`Storage engine initialized: ${storage instanceof MongoDBStorage ? 'MongoDB' : 'In-Memory'}`);
+}).catch(err => {
+  console.error('Error initializing storage:', err);
+  console.log('Using in-memory storage due to initialization error');
+});
+
+export { storage };
